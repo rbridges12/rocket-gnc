@@ -3,7 +3,8 @@ from matplotlib import pyplot as plt
 import matplotlib.animation as animation
 from scipy.integrate import solve_ivp
 
-from dynsim import dynsim
+from dynamics_combined import dynamics_combined
+from dynamics import rocket_dynamics, plane_dynamics
 
 # plt.rcParams["text.usetex"] = True
 
@@ -11,43 +12,63 @@ g = 9.81
 # x = [VP, gammaP, hP, dP, VE, gammaE, hE, dE]
 
 
-def output(x):
-    R = np.sqrt((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
+def output(xE, xP):
+    VP = xP[0]
+    gammaP = xP[1]
+    hP = xP[2]
+    dP = xP[3]
+    VE = xE[0]
+    gammaE = xE[1]
+    hE = xE[2]
+    dE = xE[3]
+    
+    # R = np.sqrt((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
+    R = np.sqrt((hE - hP) ** 2 + (dE - dP) ** 2)
+    # Rdot = (
+    #     (x[6] - x[2]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
+    #     + (x[7] - x[3]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
+    # ) / R
     Rdot = (
-        (x[6] - x[2]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
-        + (x[7] - x[3]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
+        (dE - dP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
+        + (hE - hP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
     ) / R
+    # betadot = (
+    #     (x[7] - x[3]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
+    #     - (x[6] - x[2]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
+    # ) / ((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
     betadot = (
-        (x[7] - x[3]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
-        - (x[6] - x[2]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
-    ) / ((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
+        (hE - hP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
+        - (dE - dP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
+    ) / ((hE - hP) ** 2 + (dE - dP) ** 2)
     return np.array([R, Rdot, betadot])
 
 
-def fuze(xsim):
-    R = np.sqrt((xsim[6, :] - xsim[2, :]) ** 2 + (xsim[7, :] - xsim[3, :]) ** 2)
-    # print(np.min(R))
-    temp1a = np.abs(R[1:]) < 10
-    temp1b = R[1:] * R[:-1] < 0
-    temp1c = R[1:] - R[:-1] > 0
-    # print(temp1a.shape, temp1b.shape, temp1c.shape)
-    # print(np.stack([temp1b, temp1c], axis=1).shape)
-    temp1bc = np.any(np.stack([temp1b, temp1c], axis=1), axis=1)
-    temp1 = np.all(np.stack([temp1a, temp1bc], axis=1), axis=1)
-    # print(np.any(temp1a), np.any(temp1bc), np.any(temp1))
-    temp2 = xsim[2, 1:] < 0
-    temp3 = xsim[6, 1:] < 0
-    temp4 = xsim[0, 1:] < 0
-    temp5 = xsim[4, 1:] < 0
-    # temp = np.logical_or(temp1, np.logical_or(temp2, np.logical_or(temp3, np.logical_or(temp4, temp5))))
-    temp = np.any(np.stack([temp1, temp2, temp3, temp4, temp5], axis=1), axis=1)
-    if np.any(temp, axis=0):
+def fuze(xEs, xPs):
+    VPs = xPs[0, :]
+    hPs = xPs[2, :]
+    dPs = xPs[3, :]
+    VEs = xEs[0, :]
+    hEs = xEs[2, :]
+    dEs = xEs[3, :]
+
+    Rs = np.sqrt((hEs - hPs) ** 2 + (dEs - dPs) ** 2)
+    d_less_than_range = np.abs(Rs[1:]) < 10
+    d_crossed_zero_between_steps = Rs[1:] * Rs[:-1] < 0
+    d_increasing = Rs[1:] - Rs[:-1] > 0
+    moving_away_from_target = np.any(np.stack([d_crossed_zero_between_steps, d_increasing], axis=1), axis=1)
+    fuzed = np.all(np.stack([d_less_than_range, moving_away_from_target], axis=1), axis=1)
+    P_hit_ground = hPs[1:] < 0
+    E_hit_ground = hEs[1:] < 0
+    P_stopped = VPs[1:] < 0
+    H_stopped = VEs[1:] < 0
+    engagement_over = np.any(np.stack([fuzed, P_hit_ground, E_hit_ground, P_stopped, H_stopped], axis=1), axis=1)
+    if np.any(engagement_over, axis=0):
         fuze_index = 0
-        for kk in range(len(temp)):
-            if temp[kk] == 1:
+        for kk in range(len(engagement_over)):
+            if engagement_over[kk] == 1:
                 fuze_index = kk
                 break
-        missDistance = R[fuze_index]
+        missDistance = Rs[fuze_index]
         detonate = 1
     else:
         missDistance = np.nan
@@ -55,14 +76,19 @@ def fuze(xsim):
     return detonate, missDistance
 
 
-def plot_intercept(x):
+def plot_intercept(xEs, xPs):
+    hPs = xPs[2, :]
+    dPs = xPs[3, :]
+    hEs = xEs[2, :]
+    dEs = xEs[3, :]
+    
     fig = plt.figure()
-    plt.plot(x[3, :] / 1000, x[2, :] / 1000, "b")
-    plt.plot(x[3, 0] / 1000, x[2, 0] / 1000, "bx")
-    plt.plot(x[3, -1] / 1000, x[2, -1] / 1000, "bo")
-    plt.plot(x[7, :] / 1000, x[6, :] / 1000, "r")
-    plt.plot(x[7, 0] / 1000, x[6, 0] / 1000, "rx")
-    plt.plot(x[7, -1] / 1000, x[6, -1] / 1000, "ro")
+    plt.plot(dPs / 1000, hPs / 1000, "b")
+    plt.plot(dPs[0] / 1000, hPs[0] / 1000, "bx")
+    plt.plot(dPs[-1] / 1000, hPs[-1] / 1000, "bo")
+    plt.plot(dEs / 1000, hEs / 1000, "r")
+    plt.plot(dEs[0] / 1000, hEs[0] / 1000, "rx")
+    plt.plot(dEs[-1] / 1000, hEs[-1] / 1000, "ro")
     plt.grid()
     ylimits = plt.ylim()
     plt.ylim([0, ylimits[1]])
@@ -71,15 +97,15 @@ def plot_intercept(x):
     plt.legend(["Pursuer", "Evader"])
 
 
-def animate_intercept(xs):
-    VPs = xs[0, :]
-    gammaPs = xs[1, :]
-    hPs = xs[2, :] / 1000
-    dPs = xs[3, :] / 1000
-    VEs = xs[4, :]
-    gammaEs = xs[5, :]
-    hEs = xs[6, :] / 1000
-    dEs = xs[7, :] / 1000
+def animate_intercept(xEs, xPs):
+    VPs = xPs[0, :]
+    gammaPs = xPs[1, :]
+    hPs = xPs[2, :] / 1000
+    dPs = xPs[3, :] / 1000
+    VEs = xEs[0, :]
+    gammaEs = xEs[1, :]
+    hEs = xEs[2, :] / 1000
+    dEs = xEs[3, :] / 1000
 
     x_margin = 1
     y_margin = 1
@@ -104,20 +130,20 @@ def animate_intercept(xs):
         return pursuer, evader, pursuer_path, evader_path
 
     ani = animation.FuncAnimation(
-        fig, animate, frames=xs.shape[1], interval=30, repeat=True
+        fig, animate, frames=xEs.shape[1], interval=30, repeat=True
     )
     return ani
 
 
-def plot_trajectories(xs, ts):
-    VPs = xs[0, :]
-    gammaPs = xs[1, :]
-    hPs = xs[2, :]
-    dPs = xs[3, :]
-    VEs = xs[4, :]
-    gammaEs = xs[5, :]
-    hEs = xs[6, :]
-    dEs = xs[7, :]
+def plot_trajectories(xEs, xPs, ts):
+    VPs = xPs[0, :]
+    gammaPs = xPs[1, :]
+    hPs = xPs[2, :]
+    dPs = xPs[3, :]
+    VEs = xEs[0, :]
+    gammaEs = xEs[1, :]
+    hEs = xEs[2, :]
+    dEs = xEs[3, :]
 
     fig, axs = plt.subplots(2, 2, sharex=True)
     axs[0, 0].plot(ts, dPs, "r-", label="Pursuer")
@@ -142,50 +168,64 @@ def plot_trajectories(xs, ts):
     axs[1, 1].set_xlabel("Time (s)")
 
 
-def simulate_engagement(x0):
+def simulate_engagement(xE0, xP0):
     duration = 70
     dt = 0.1
     nzE = -g
 
     # loft conditions
-    delta_h0 = x0[6] - x0[2]
-    delta_d0 = np.abs(x0[7] - x0[3])
+    delta_h0 = xE0[2] - xP0[2]
+    delta_d0 = np.abs(xE0[3] - xP0[3])
     loft = delta_h0 > -100 and delta_d0 > 2000
     # loft = False
 
-    xs = np.zeros((8, int(duration / dt) + 1))
+    xEs = np.zeros((4, int(duration / dt) + 1))
+    xPs = np.zeros((4, int(duration / dt) + 1))
     ts = np.arange(0, duration + dt, dt)
     nzPs = np.zeros(int(duration / dt) + 1)
-    xs[:, 0] = x0
-    aPs = []
-    rhoPs = []
+    xEs[:, 0] = xE0
+    xPs[:, 0] = xP0
+    # aPs = []
+    # rhoPs = []
 
-    def odefun_debug(t, x):
-        dx, aP, rhoP = dynsim(x, t, nzE, nzPs[int(t / dt)])
-        aPs.append(aP)
-        rhoPs.append(rhoP)
-        # print(rhoPs[-1])
-        # print(len(rhoPs))
-        return dx
+    # def odefun_debug(t, x):
+    #     dx, aP, rhoP = dynsim(x, t, nzE, nzPs[int(t / dt)])
+    #     aPs.append(aP)
+    #     rhoPs.append(rhoP)
+    #     # print(rhoPs[-1])
+    #     # print(len(rhoPs))
+    #     return dx
         
     for i in range(int(duration / dt)):
         # simulate dynamics for timestep
         t = i * dt
         next_t = (i + 1) * dt
-        odefun = lambda t, x: dynsim(x, t, nzE, nzPs[i])
-        sol = solve_ivp(
-            odefun_debug,
+        odefun_E = lambda t, x: plane_dynamics(x, t, nzE)
+        odefun_P = lambda t, x: rocket_dynamics(x, t, nzPs[i])
+        solE = solve_ivp(
+            odefun_E,
             [t, next_t],
-            xs[:, i],
+            xEs[:, i],
             method="RK45",
             t_eval=np.linspace(t, next_t, 40),
         )
-        xsim = sol.y
-        xs[:, i + 1] = xsim[:, -1]
-        y = output(xs[:, i + 1])
+        xEsim = solE.y
+        xEs[:, i + 1] = xEsim[:, -1]
+
+        solP = solve_ivp(
+            odefun_P,
+            [t, next_t],
+            xPs[:, i],
+            method="RK45",
+            t_eval=np.linspace(t, next_t, 40),
+        )
+        xPsim = solP.y
+        xPs[:, i + 1] = xPsim[:, -1]
+
+        y = output(xEs[:, i + 1], xPs[:, i + 1])
 
         # compute next guidance command
-        nzP_PG = lambda k: -k * np.abs(y[1]) * y[2] - g * np.cos(xs[1, i + 1])
+        nzP_PG = lambda k: -k * np.abs(y[1]) * y[2] - g * np.cos(xPs[1, i + 1])
         if loft:
             loft_duration = delta_d0 / 2000.0 - 0.05
             if t < loft_duration:
@@ -195,11 +235,12 @@ def simulate_engagement(x0):
         else:
             nzPs[i + 1] = nzP_PG(5)
             # nzPs[i + 1] = -g
-        detonate, missDistance = fuze(xsim)
+        detonate, missDistance = fuze(xEsim, xPsim)
         # print(f"t = {t} s, miss distance = {missDistance} m")
         if detonate:
             ts = ts[: i + 1]
-            xs = xs[:, : i + 1]
+            xEs = xEs[:, : i + 1]
+            xPs = xPs[:, : i + 1]
             nzPs = nzPs[: i + 1]
             print(f"Detonated at t = {t} s, miss distance = {missDistance} m")
             if loft:
@@ -208,33 +249,32 @@ def simulate_engagement(x0):
 
     # loft_duration = delta_d0 / 2000.0 - 0.05
     # print(f"Loft duration = {loft_duration} s")
-    return xs, ts, nzPs, aPs, rhoPs
+    return xEs, xPs, ts, nzPs
 
 
-# x = [VP, gammaP, hP, dP, VE, gammaE, hE, dE]
-x0s = [
-    np.array([450, 0, 10000, 0, 450, 0, 10000, 6500]),
-    # np.array([450, 0, 10000, 0, -450, 0, 10000, 6500]),
-    np.array([450, 0, 10000, 0, 350, 0.1, 10000, 9000]),
-    np.array([450, 0, 10000, 0, 350, -0.1, 10000, 8000]),
-    np.array([450, 0, 8000, 0, 350, -0.1, 10000, 6000]),
-    np.array([450, 0, 4000, 0, 350, 0.2, 6000, 2000]),
-    np.array([450, 0, 10000, 0, 350, 0.2, 6000, 2000]),
-    np.array([450, 0, 10000, 0, 400, 0, 7000, 5000]),
-    np.array([450, 0, 10000, 0, 400, 0.0, 12000, 6000]),
-    np.array([450, 0, 9000, 0, 400, -0.1, 12000, 6000]),
-    np.array([450, 0, 9000, 0, 320, -0.4, 12000, 7000]),
+# (pursuer x0, evader x0) = ([VP, gammaP, hP, dP], [VE, gammaE, hE, dE])
+initial_conditions = [
+    (np.array([450, 0, 10000, 0]), np.array([450, 0, 10000, 6500])),
+    #(np.array([450, 0, 10000, 0]), np.array([-450, 0, 10000, 6500])),
+    (np.array([450, 0, 10000, 0]), np.array([350, 0.1, 10000, 9000])),
+    (np.array([450, 0, 10000, 0]), np.array([350, -0.1, 10000, 8000])),
+    (np.array([450, 0, 8000, 0]), np.array([350, -0.1, 10000, 6000])),
+    (np.array([450, 0, 4000, 0]), np.array([350, 0.2, 6000, 2000])),
+    (np.array([450, 0, 10000, 0]), np.array([350, 0.2, 6000, 2000])),
+    (np.array([450, 0, 10000, 0]), np.array([400, 0, 7000, 5000])),
+    (np.array([450, 0, 10000, 0]), np.array([400, 0.0, 12000, 6000])),
+    (np.array([450, 0, 9000, 0]), np.array([400, -0.1, 12000, 6000])),
+    (np.array([450, 0, 9000, 0]), np.array([320, -0.4, 12000, 7000])),
 ]
 
-for x0 in x0s:
-    xs, ts, nzPs, aPs, rhoPs = simulate_engagement(x0)
+for xP0, xE0 in initial_conditions:
+    xEs, xPs, ts, nzPs = simulate_engagement(xE0, xP0)
     # plot_trajectories(xs, ts)
-    fig, (ax1, ax2) = plt.subplots(2, 1)
-    ax1.plot(np.arange(len(aPs)), np.array(aPs), label="aP")
-    ax2.plot(np.arange(len(rhoPs)), rhoPs, label="rhoP")
-    plt.legend()
+    # fig, (ax1, ax2) = plt.subplots(2, 1)
+    # ax1.plot(np.arange(len(aPs)), np.array(aPs), label="aP")
+    # ax2.plot(np.arange(len(rhoPs)), rhoPs, label="rhoP")
+    # plt.legend()
+    plot_intercept(xEs, xPs)
     plt.show()
-    plot_intercept(xs)
-    plt.show()
-    ani = animate_intercept(xs)
+    ani = animate_intercept(xEs, xPs)
     plt.show()

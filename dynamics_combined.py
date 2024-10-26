@@ -5,7 +5,7 @@ from scipy.interpolate import pchip_interpolate
 # constants
 g = 9.81
 R = 287.1
-gamma = 1.4
+specific_heat_ratio_air = 1.4
 data0 = coesa76(0)
 rho0 = data0.rho
 # T0 = data0.T
@@ -44,7 +44,7 @@ def SRM_thrust(t):
         return 0
 
 
-def dynsim(x, t, nzE, nzP):
+def dynamics_combined(x, t, nzE, nzP):
     dx = np.zeros(8)
     VP, gammaP, hP, dP, VE, gammaE, hE, dE = x
 
@@ -53,12 +53,12 @@ def dynsim(x, t, nzE, nzP):
     rhoP = data_P.rho
     TP = data_P.T
     PP = data_P.P
-    aP = np.sqrt(gamma * R * TP)
+    aP = np.sqrt(specific_heat_ratio_air * R * TP)
     data_E = coesa76(hE / 1000)
     rhoE = data_E.rho
     TE = data_E.T
     PE = data_E.P
-    aE = np.sqrt(gamma * R * TE)
+    aE = np.sqrt(specific_heat_ratio_air * R * TE)
 
     # calculate drag coefficients by interpolating measured data
     CdP = pchip_interpolate(MiP, CdiP, VP / aP)
