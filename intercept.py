@@ -10,7 +10,27 @@ from dynamics import rocket_dynamics, plane_dynamics
 
 g = 9.81
 # x = [VP, gammaP, hP, dP, VE, gammaE, hE, dE]
+# x[0] = VP
+# x[1] = gammaP
+# x[2] = hP
+# x[3] = dP
+# x[4] = VE
+# x[5] = gammaE
+# x[6] = hE
+# x[7] = dE
 
+
+# def output_old(x):
+#     R = np.sqrt((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
+#     Rdot = (
+#         (x[6] - x[2]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
+#         + (x[7] - x[3]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
+#     ) / R
+#     betadot = (
+#         (x[7] - x[3]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
+#         - (x[6] - x[2]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
+#     ) / ((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
+#     return np.array([R, Rdot, betadot])
 
 def output(xE, xP):
     VP = xP[0]
@@ -29,16 +49,16 @@ def output(xE, xP):
     #     + (x[7] - x[3]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
     # ) / R
     Rdot = (
-        (dE - dP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
-        + (hE - hP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
+        (hE - hP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
+        + (dE - dP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
     ) / R
     # betadot = (
     #     (x[7] - x[3]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
     #     - (x[6] - x[2]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
     # ) / ((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
     betadot = (
-        (hE - hP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
-        - (dE - dP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
+        (dE - dP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
+        - (hE - hP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
     ) / ((hE - hP) ** 2 + (dE - dP) ** 2)
     return np.array([R, Rdot, betadot])
 
@@ -202,24 +222,37 @@ def simulate_engagement(xE0, xP0):
         next_t = (i + 1) * dt
         odefun_E = lambda t, x: plane_dynamics(x, t, nzE)
         odefun_P = lambda t, x: rocket_dynamics(x, t, nzPs[i])
-        solE = solve_ivp(
-            odefun_E,
-            [t, next_t],
-            xEs[:, i],
-            method="RK45",
-            t_eval=np.linspace(t, next_t, 40),
-        )
-        xEsim = solE.y
-        xEs[:, i + 1] = xEsim[:, -1]
+        odefun_combined = lambda t, x: dynamics_combined(x, t, nzE, nzPs[i])
+        # solE = solve_ivp(
+        #     odefun_E,
+        #     [t, next_t],
+        #     xEs[:, i],
+        #     method="RK45",
+        #     t_eval=np.linspace(t, next_t, 40),
+        # )
+        # xEsim = solE.y
+        # xEs[:, i + 1] = xEsim[:, -1]
 
-        solP = solve_ivp(
-            odefun_P,
+        # solP = solve_ivp(
+        #     odefun_P,
+        #     [t, next_t],
+        #     xPs[:, i],
+        #     method="RK45",
+        #     t_eval=np.linspace(t, next_t, 40),
+        # )
+        # xPsim = solP.y
+        # xPs[:, i + 1] = xPsim[:, -1]
+
+        sol = solve_ivp(
+            odefun_combined,
             [t, next_t],
-            xPs[:, i],
+            np.concatenate([xPs[:, i], xEs[:, i]]),
             method="RK45",
             t_eval=np.linspace(t, next_t, 40),
         )
-        xPsim = solP.y
+        xPsim = sol.y[:4, :]
+        xEsim = sol.y[4:, :]
+        xEs[:, i + 1] = xEsim[:, -1]
         xPs[:, i + 1] = xPsim[:, -1]
 
         y = output(xEs[:, i + 1], xPs[:, i + 1])
@@ -234,7 +267,7 @@ def simulate_engagement(xE0, xP0):
                 nzPs[i + 1] = nzP_PG(10)
         else:
             nzPs[i + 1] = nzP_PG(5)
-            # nzPs[i + 1] = -g
+        # nzPs[i + 1] = -g
         detonate, missDistance = fuze(xEsim, xPsim)
         # print(f"t = {t} s, miss distance = {missDistance} m")
         if detonate:

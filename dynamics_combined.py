@@ -80,4 +80,4 @@ def dynamics_combined(x, t, nzE, nzP):
     dx[5] = -(1 / VE) * (nzE + g * np.cos(gammaE))
     dx[6] = VE * np.sin(gammaE)
     dx[7] = VE * np.cos(gammaE)
-    return dx, aP, rhoP
+    return dx
