@@ -3,8 +3,9 @@ from matplotlib import pyplot as plt
 import matplotlib.animation as animation
 from scipy.integrate import solve_ivp
 
-from dynamics_combined import dynamics_combined
-from dynamics import rocket_dynamics, plane_dynamics
+# from dynamics_combined import dynamics_combined
+# from dynamics import rocket_dynamics, plane_dynamics
+from dynsim_old import dynsim
 
 # plt.rcParams["text.usetex"] = True
 
@@ -220,9 +221,15 @@ def simulate_engagement(xE0, xP0):
         # simulate dynamics for timestep
         t = i * dt
         next_t = (i + 1) * dt
-        odefun_E = lambda t, x: plane_dynamics(x, t, nzE)
-        odefun_P = lambda t, x: rocket_dynamics(x, t, nzPs[i])
-        odefun_combined = lambda t, x: dynamics_combined(x, t, nzE, nzPs[i])
+        # odefun_E = lambda t, x: plane_dynamics(x, t, nzE)
+        # odefun_P = lambda t, x: rocket_dynamics(x, t, nzPs[i])
+        # odefun_combined = lambda t, x: dynamics_combined(x, t, nzE, nzPs[i])
+        # odefun_combined = lambda t, x: dynsim(x, t, nzE, nzPs[int(t / dt)])
+        print(f"next iteration, t0 = {t}")
+        def odefun_combined(t, x):
+            dx = dynsim(x, t, nzE, nzPs[i])
+            print(f"i = {i}, nzP = {nzPs[i]}")
+            return dx
         # solE = solve_ivp(
         #     odefun_E,
         #     [t, next_t],
