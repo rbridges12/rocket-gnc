@@ -4,8 +4,8 @@ import matplotlib.animation as animation
 from scipy.integrate import solve_ivp
 
 # from dynamics_combined import dynamics_combined
-# from dynamics import rocket_dynamics, plane_dynamics
-from dynsim_old import dynsim
+from dynamics import rocket_dynamics, plane_dynamics
+# from dynsim_old import dynsim
 
 # plt.rcParams["text.usetex"] = True
 
@@ -20,20 +20,7 @@ g = 9.81
 # x[6] = hE
 # x[7] = dE
 
-
-# def output_old(x):
-#     R = np.sqrt((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
-#     Rdot = (
-#         (x[6] - x[2]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
-#         + (x[7] - x[3]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
-#     ) / R
-#     betadot = (
-#         (x[7] - x[3]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
-#         - (x[6] - x[2]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
-#     ) / ((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
-#     return np.array([R, Rdot, betadot])
-
-def output(xE, xP):
+def sensor_model(xE, xP):
     VP = xP[0]
     gammaP = xP[1]
     hP = xP[2]
@@ -43,25 +30,19 @@ def output(xE, xP):
     hE = xE[2]
     dE = xE[3]
     
-    # R = np.sqrt((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
-    R = np.sqrt((hE - hP) ** 2 + (dE - dP) ** 2)
-    # Rdot = (
-    #     (x[6] - x[2]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
-    #     + (x[7] - x[3]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
-    # ) / R
-    Rdot = (
-        (hE - hP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
-        + (dE - dP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
-    ) / R
-    # betadot = (
-    #     (x[7] - x[3]) * (x[4] * np.sin(x[5]) - x[0] * np.sin(x[1]))
-    #     - (x[6] - x[2]) * (x[4] * np.cos(x[5]) - x[0] * np.cos(x[1]))
-    # ) / ((x[6] - x[2]) ** 2 + (x[7] - x[3]) ** 2)
-    betadot = (
-        (dE - dP) * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
-        - (hE - hP) * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
-    ) / ((hE - hP) ** 2 + (dE - dP) ** 2)
-    return np.array([R, Rdot, betadot])
+    P_pos = np.array([dP, hP])
+    E_pos = np.array([dE, hE])
+    target_vector = E_pos - P_pos
+    range = np.linalg.norm(target_vector)
+    range_vel = (
+        target_vector[0] * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
+        + target_vector[1] * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
+    ) / range
+    line_of_sight_angle_rate = (
+        target_vector[0] * (VE * np.sin(gammaE) - VP * np.sin(gammaP))
+        - target_vector[1] * (VE * np.cos(gammaE) - VP * np.cos(gammaP))
+    ) / range ** 2
+    return np.array([range, range_vel, line_of_sight_angle_rate])
 
 
 def fuze(xEs, xPs):
@@ -206,66 +187,56 @@ def simulate_engagement(xE0, xP0):
     nzPs = np.zeros(int(duration / dt) + 1)
     xEs[:, 0] = xE0
     xPs[:, 0] = xP0
-    # aPs = []
-    # rhoPs = []
-
-    # def odefun_debug(t, x):
-    #     dx, aP, rhoP = dynsim(x, t, nzE, nzPs[int(t / dt)])
-    #     aPs.append(aP)
-    #     rhoPs.append(rhoP)
-    #     # print(rhoPs[-1])
-    #     # print(len(rhoPs))
-    #     return dx
         
     for i in range(int(duration / dt)):
         # simulate dynamics for timestep
         t = i * dt
         next_t = (i + 1) * dt
-        # odefun_E = lambda t, x: plane_dynamics(x, t, nzE)
-        # odefun_P = lambda t, x: rocket_dynamics(x, t, nzPs[i])
+        odefun_E = lambda t, x: plane_dynamics(x, t, nzE)
+        odefun_P = lambda t, x: rocket_dynamics(x, t, nzPs[i])
         # odefun_combined = lambda t, x: dynamics_combined(x, t, nzE, nzPs[i])
         # odefun_combined = lambda t, x: dynsim(x, t, nzE, nzPs[int(t / dt)])
-        print(f"next iteration, t0 = {t}")
-        def odefun_combined(t, x):
-            dx = dynsim(x, t, nzE, nzPs[i])
-            print(f"i = {i}, nzP = {nzPs[i]}")
-            return dx
-        # solE = solve_ivp(
-        #     odefun_E,
-        #     [t, next_t],
-        #     xEs[:, i],
-        #     method="RK45",
-        #     t_eval=np.linspace(t, next_t, 40),
-        # )
-        # xEsim = solE.y
-        # xEs[:, i + 1] = xEsim[:, -1]
-
-        # solP = solve_ivp(
-        #     odefun_P,
-        #     [t, next_t],
-        #     xPs[:, i],
-        #     method="RK45",
-        #     t_eval=np.linspace(t, next_t, 40),
-        # )
-        # xPsim = solP.y
-        # xPs[:, i + 1] = xPsim[:, -1]
-
-        sol = solve_ivp(
-            odefun_combined,
+        # print(f"next iteration, t0 = {t}")
+        # def odefun_combined(t, x):
+        #     dx = dynsim(x, t, nzE, nzPs[i])
+        #     print(f"i = {i}, nzP = {nzPs[i]}")
+        #     return dx
+        solE = solve_ivp(
+            odefun_E,
             [t, next_t],
-            np.concatenate([xPs[:, i], xEs[:, i]]),
+            xEs[:, i],
             method="RK45",
             t_eval=np.linspace(t, next_t, 40),
         )
-        xPsim = sol.y[:4, :]
-        xEsim = sol.y[4:, :]
+        xEsim = solE.y
         xEs[:, i + 1] = xEsim[:, -1]
+
+        solP = solve_ivp(
+            odefun_P,
+            [t, next_t],
+            xPs[:, i],
+            method="RK45",
+            t_eval=np.linspace(t, next_t, 40),
+        )
+        xPsim = solP.y
         xPs[:, i + 1] = xPsim[:, -1]
 
-        y = output(xEs[:, i + 1], xPs[:, i + 1])
+        # sol = solve_ivp(
+        #     odefun_combined,
+        #     [t, next_t],
+        #     np.concatenate([xPs[:, i], xEs[:, i]]),
+        #     method="RK45",
+        #     t_eval=np.linspace(t, next_t, 40),
+        # )
+        # xPsim = sol.y[:4, :]
+        # xEsim = sol.y[4:, :]
+        # xEs[:, i + 1] = xEsim[:, -1]
+        # xPs[:, i + 1] = xPsim[:, -1]
+
+        z = sensor_model(xEs[:, i + 1], xPs[:, i + 1])
 
         # compute next guidance command
-        nzP_PG = lambda k: -k * np.abs(y[1]) * y[2] - g * np.cos(xPs[1, i + 1])
+        nzP_PG = lambda k: -k * np.abs(z[1]) * z[2] - g * np.cos(xPs[1, i + 1])
         if loft:
             loft_duration = delta_d0 / 2000.0 - 0.05
             if t < loft_duration:

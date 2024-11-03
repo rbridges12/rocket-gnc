@@ -1,0 +1,56 @@
+\documentclass[11pt]{article}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb, float}
+\usepackage{mathtools}
+\usepackage{enumitem}
+\allowdisplaybreaks
+
+\DeclareMathOperator{\EX}{\mathbb{E}}% expected value
+\DeclareMathOperator{\Var}{\operatorname{Var}}% variance
+\DeclareMathOperator{\Span}{\operatorname{span}}% span
+\DeclareMathOperator{\Ad}{\operatorname{Ad}}% Adjoint
+\newcommand{\pd}[2]{\frac{\partial #1}{\partial #2}} % partial derivatives
+
+\title{Notes}
+\author{rlybrdgs }
+
+\begin{document}
+
+\maketitle
+\section{3D Dynamics}
+3D Dynamics with fixed mass, using a rotation matrix to represent orientation:
+\begin{align*}
+    \mathbf{x} &= \begin{bmatrix}
+        \mathbf{p} \\ \mathbf{R} \\ \mathbf{v} \\ \mathbf{\omega}
+    \end{bmatrix}, \quad
+    \mathbf{u} = \begin{bmatrix}
+        \tau_x \\ \tau_y \\ \tau_z
+    \end{bmatrix} \\
+    \dot{\mathbf{p}} &= \mathbf{v} \\
+    \dot{\mathbf{R}} &= \mathbf{R} \hat{\omega} \\
+    \dot{\mathbf{v}} &= \frac{1}{m} \mathbf{R} \begin{bmatrix}
+        f_T - f_D \\ 0 \\ 0
+    \end{bmatrix} + \begin{bmatrix}
+        0 \\ 0 \\ -g
+    \end{bmatrix} \\
+    \dot{\mathbf{\omega}} &= \mathcal{I}^{-1} \left( \mathbf{u} - \mathbf{\omega} \times \mathcal{I} \mathbf{\omega} \right)
+\end{align*}
+Where $\hat{\omega}$ is the skew-symmetric matrix of $\mathbf{\omega}$, $f_T$ is the thrust force, $f_D$ is the drag force, $m$ is the mass, $g$ is the acceleration due to gravity, and $\mathcal{I}$ is the inertia matrix. We can combine these equations to get the full dynamics:
+\begin{align*}
+    \dot{\mathbf{x}} &= f(\mathbf{x}, \mathbf{u}, t) \\
+    \begin{bmatrix}
+        \dot{\mathbf{p}} \\
+        \dot{\mathbf{R}} \\
+        \dot{\mathbf{v}} \\
+        \dot{\mathbf{\omega}}
+    \end{bmatrix}
+     &= \begin{bmatrix}
+        \mathbf{v} \\
+        \mathbf{R} \hat{\omega} \\
+        \frac{f_T(t) - f_D(\mathbf{x})}{m} \mathbf{R} \mathbf{e}_1 - g\mathbf{e}_3 \\
+        \mathcal{I}^{-1} \left( \mathbf{u} - \mathbf{\omega} \times \mathcal{I} \mathbf{\omega} \right)
+     \end{bmatrix} \\
+     f_D(\mathbf{x}) &= \frac{1}{2} \rho \|\mathbf{v}\|^2 C_D A
+\end{align*}
+
+\end{document}
