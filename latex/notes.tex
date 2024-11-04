@@ -29,9 +29,9 @@
     \dot{\mathbf{p}} &= \mathbf{v} \\
     \dot{\mathbf{R}} &= \mathbf{R} \hat{\omega} \\
     \dot{\mathbf{v}} &= \frac{1}{m} \mathbf{R} \begin{bmatrix}
-        f_T - f_D \\ 0 \\ 0
-    \end{bmatrix} + \begin{bmatrix}
-        0 \\ 0 \\ -g
+        f_T \\ 0 \\ 0
+    \end{bmatrix} - \frac{f_D}{m\|\mathbf{v}\|} \mathbf{v} - \begin{bmatrix}
+        0 \\ 0 \\ g
     \end{bmatrix} \\
     \dot{\mathbf{\omega}} &= \mathcal{I}^{-1} \left( \mathbf{u} - \mathbf{\omega} \times \mathcal{I} \mathbf{\omega} \right)
 \end{align*}
@@ -47,7 +47,7 @@ Where $\hat{\omega}$ is the skew-symmetric matrix of $\mathbf{\omega}$, $f_T$ is
      &= \begin{bmatrix}
         \mathbf{v} \\
         \mathbf{R} \hat{\omega} \\
-        \frac{f_T(t) - f_D(\mathbf{x})}{m} \mathbf{R} \mathbf{e}_1 - g\mathbf{e}_3 \\
+        \frac{f_T(t)}{m} \mathbf{R} \mathbf{e}_1 - \frac{f_D(\mathbf{x})}{m\|\mathbf{v}\|} \mathbf{v} - g\mathbf{e}_3 \\
         \mathcal{I}^{-1} \left( \mathbf{u} - \mathbf{\omega} \times \mathcal{I} \mathbf{\omega} \right)
      \end{bmatrix} \\
      f_D(\mathbf{x}) &= \frac{1}{2} \rho \|\mathbf{v}\|^2 C_D A

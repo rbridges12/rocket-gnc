@@ -16,12 +16,20 @@ rho0 = data0.rho
 A = 2.3
 
 # pursuer and evader masses (kg)
-m = 130
+m = 161.5
+L = 3.65
+radius = 0.178 / 2
 
 # inertia matrix
-I = np.array([[150, 0, 0],
-                [0, 1500, 0],
-                [0, 0, 1500]])
+Ixx = 0.5 * m * radius ** 2
+Iyy = 1 / 12 * m * (3 * radius ** 2 + L ** 2)
+Izz = Iyy
+I = np.array([[Ixx, 0, 0],
+            [0, Iyy, 0],
+            [0, 0, Izz]])
+
+# distance between center of pressure and center of mass
+d_COP = 0.625
 
 # pursuer and evader drag coefficient vs Mach number data
 MiP = np.array([0, 0.6, 0.8, 1, 1.2, 2, 3, 4, 5])
@@ -45,7 +53,7 @@ def SRM_thrust(t):
     #     return 1800
     # else:
     #     return 0
-    return 2000
+    return 4000
 
 
 # x = [p, R, v, omega], u = [tau_x, tau_y, tau_z]
@@ -67,7 +75,10 @@ def rocket_dynamics3d(x, u, t):
     speed = np.linalg.norm(v)
     Cd = pchip_interpolate(MiP, CdiP, speed / a)
     f_D = 0.5 * rho * speed ** 2 * Cd * A  # drag force
+    # f_D_x = 
     f_T = SRM_thrust(t) # thrust force
+    # f_D = 0
+    # f_T = 0
 
     omega_hat = np.array([[0, -omega[2], omega[1]],
                             [omega[2], 0, -omega[0]],
@@ -75,7 +86,7 @@ def rocket_dynamics3d(x, u, t):
 
     p_dot = v
     R_dot = R @ omega_hat
-    v_dot = (f_T - f_D) / m * R @ np.array([1, 0, 0]) - np.array([0, 0, g])
+    v_dot = f_T / m * R @ np.array([1, 0, 0]) - f_D / (m * speed) * v - np.array([0, 0, g])
     omega_dot = np.linalg.inv(I) @ (u - np.cross(omega, I @ omega)) # TODO: use solve to make inversion faster
     dx = np.concatenate((p_dot, R_dot.flatten(), v_dot, omega_dot))
     return dx

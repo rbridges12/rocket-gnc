@@ -125,14 +125,14 @@ def simulate():
     def control_torque(t):
         if t < 10:
             return np.array([0, 0, 0])
-        elif t < 15:
-            return np.array([0, 100, 0])
+        elif t < 20:
+            return np.array([0, -800, 0])
         elif t < 30:
             return np.array([0, 0, 0])
-        elif t < 35:
-            return np.array([0, 0, 50])
+        elif t < 40:
+            return np.array([0, -1000, 750])
         else:
-            return np.array([0, 0, 0])
+            return np.array([0, -1000, 0])
     
     duration = 70
     dt = 0.1
