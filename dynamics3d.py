@@ -45,24 +45,15 @@ def turbojet_thrust(T0, rho):
     return (rho / rho0) * T0
 
 
-# boost-sustain solid rocket motor thrust profile
-def SRM_thrust(t):
-    # if t < 10:
-    #     return 10000
-    # elif t < 30:
-    #     return 1800
-    # else:
-    #     return 0
-    return 4000
-
-
-# x = [p, R, v, omega], u = [tau_x, tau_y, tau_z]
+# x = [p, R, v, omega], u = [tau_x, tau_y, tau_z, f_T]
 def rocket_dynamics3d(x, u, t):
     p = x[:3]
     # print(x)
     R = x[3:12].reshape(3, 3)
     v = x[12:15]
     omega = x[15:]
+    tau_control = u[:3]
+    f_T = u[3]
 
     # air density and speed of sound at current altitude
     data = coesa76(p[2] / 1000)
@@ -75,10 +66,15 @@ def rocket_dynamics3d(x, u, t):
     speed = np.linalg.norm(v)
     Cd = pchip_interpolate(MiP, CdiP, speed / a)
     f_D = 0.5 * rho * speed ** 2 * Cd * A  # drag force
-    # f_D_x = 
-    f_T = SRM_thrust(t) # thrust force
-    # f_D = 0
-    # f_T = 0
+    f_D_vector = -f_D * v / speed
+    f_T_vector = f_T * R[:, 0]
+    f_g_vector = np.array([0, 0, -m * g])  # gravity force
+    f_net_vector = f_T_vector + f_D_vector + f_g_vector # net force acting on COM in world frame
+
+    p = np.array([d_COP, 0, 0])  # vector from COP to COM in body frame
+    tau_D = np.cross(-p, R.T @ f_D_vector)  # torque due to drag in body frame
+    tau_net = tau_control + tau_D  # net torque acting on COM in body frame
+    # TODO: track velocity and body frame instead of world frame, so we can use nicer adjoint formulation for wrenches
 
     omega_hat = np.array([[0, -omega[2], omega[1]],
                             [omega[2], 0, -omega[0]],
@@ -86,7 +82,7 @@ def rocket_dynamics3d(x, u, t):
 
     p_dot = v
     R_dot = R @ omega_hat
-    v_dot = f_T / m * R @ np.array([1, 0, 0]) - f_D / (m * speed) * v - np.array([0, 0, g])
-    omega_dot = np.linalg.inv(I) @ (u - np.cross(omega, I @ omega)) # TODO: use solve to make inversion faster
+    v_dot = f_net_vector / m
+    omega_dot = np.linalg.inv(I) @ (tau_net - np.cross(omega, I @ omega)) # TODO: use solve to make inversion faster
     dx = np.concatenate((p_dot, R_dot.flatten(), v_dot, omega_dot))
     return dx
