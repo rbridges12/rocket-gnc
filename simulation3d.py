@@ -4,6 +4,7 @@ import matplotlib.animation as animation
 from scipy.integrate import solve_ivp
 
 from dynamics3d import rocket_dynamics3d
+from pid_controller import PIDController
 
 # plt.rcParams["text.usetex"] = True
 
@@ -114,17 +115,17 @@ def simulate():
     #         return np.array([0, -1000, 750])
     #     else:
     #         return np.array([0, -1000, 0])
-        return np.array([0, 0, 0])
+        return np.array([0, -700, 0])
 
     # boost-sustain solid rocket motor thrust profile
     def SRM_thrust(t):
-        # if t < 10:
-        #     return 10000
-        # elif t < 30:
-        #     return 1800
-        # else:
-        #     return 0
-        return 4000
+        if t < 10:
+            return 10000
+        elif t < 30:
+            return 1800
+        else:
+            return 0
+        # return 4000
 
     duration = 70
     dt = 0.1
@@ -135,17 +136,30 @@ def simulate():
     ts = np.arange(0, duration + dt, dt)
     us = np.zeros((m, int(duration / dt) + 1))
     xs[:, 0] = x0
+
+    z_pos_controller = PIDController(10, 0, 0, 10000, dt)
         
     for i in range(int(duration / dt)):
+        # calculate next control input
+        if i * dt > 30:
+            z_pos_controller.set_setpoint(9000)
+        x_current = xs[:, i]
+        tau_y = -z_pos_controller.update(x_current[2])
+        tau_y = np.clip(tau_y, -1000, 1000)
+        print(tau_y)
+        # tau_y = -500
+        tau = np.array([0, tau_y, 0])
+        
         # simulate dynamics for timestep
         t = i * dt
         next_t = (i + 1) * dt
-        u = lambda t: np.append(control_torque(t), SRM_thrust(t))
+        u = lambda t: np.append(tau, SRM_thrust(t))
+        # u = lambda t: np.append(control_torque(t), SRM_thrust(t))
         odefun = lambda t, x: rocket_dynamics3d(x, u(t), t)
         sol = solve_ivp(
             odefun,
             [t, next_t],
-            xs[:, i],
+            x_current,
             method="RK45",
             t_eval=np.linspace(t, next_t, 40),
         )
